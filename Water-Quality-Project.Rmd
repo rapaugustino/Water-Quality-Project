@@ -1,0 +1,735 @@
+---
+title: "Water Quality"
+output: html_document
+---
+
+
+## Introduction
+
+Arsenic naturally occurs in groundwater sources around the world. Arsenic contamination of groundwater affects millions of people around the world including the United States, Nicaragua, Argentina, China, Mexico, Chile, Bangladesh, India, and Vietnam, for example (Smith et al. 2000; Amini et al. 2008; Lin et al. 2017). The World Health Organization (WHO 2018a) estimates that over 140 million people in 50 countries are exposed to arsenic contaminated drinking water above the WHO guideline of 10 $\mu$g/L. Health effects of arsenic exposure include numerous types of cancer and other disorders.
+
+This project follows an analysis of a public health study performed in rural Bangladesh (Gelman et al. 2004). In this study, wells used for drinking water were analyzed for arsenic contamination and correspondingly labeled as safe or unsafe. The study determined whether households switched the well used for drinking water and measured. Additionally, several variables where measured that were thought to possibly influence the decision of whether or not to switch wells. Here, we will investigate how accurately we can predict whether or not a household will switch wells based on these environmental variables.
+
+
+## Data Collection
+
+See Gelman et al. (2004) for a discussion of data collection. Briefly, arsenic levels were measured in Araihazar, Bangladesh during the years 1999 - 2000. Additional information was collected by a survey:
+1. Whether or not the household swithed wells.
+2. The distance (in meters) to the closest known safe well.
+3. Whether any members of the household are involved in community organizations.
+4. The highest education level in the household.
+
+### Load necessary packages
+
+```{r, warning=FALSE}
+
+#skimr provides a nice summary of a data set
+library(skimr)
+#tidyverse contains packages we will use for processing and plotting data
+library(tidyverse)
+#GGally has a nice pairs plotting function
+library(GGally)
+#tidymodels has a nice workflow for many models. We will use it for XGBoost
+library(tidymodels)
+#xgboost lets us fit XGBoost models
+library(xgboost)
+#vip is used to visualize the importance of predicts in XGBoost models
+library(vip)
+
+#Set the plotting theme
+theme_set(theme_bw())
+
+```
+
+
+### Data ethics
+
+
+#### The problem
+
+Is it possible to answer our question with data? Is the problem well-posed?
+
+Can we cause harm to individuals with this project?
+
+#### The data
+
+Are individuals identified in the data set?
+
+Are there issues of privacy or consent that we should address?
+
+Are there sources of bias in the data?
+
+We will discuss these issues in class.
+
+
+## Data Preparation
+
+
+### Load the data 
+
+
+$\rightarrow$ Load the data set contained in the file `wells.dat` and name the data frame `df`.
+
+<details>
+  <summary>**Show Coding Hint**</summary>
+
+Use `read.table`
+
+</details>
+
+
+
+
+
+### Explore the contents of the data set
+
+
+$\rightarrow$ Look at the first few rows of the data frame.
+
+<details>
+  <summary>**Show Coding Hint**</summary>
+
+You can use the functions `head` or `glimpse` to see the head of the data frame or the function `skim` to get a nice summary.
+  
+</details>
+
+
+<br>
+
+
+#### Explore the columns
+
+$\rightarrow$ What are the variables?
+
+$\rightarrow$ What variable(s) do we want to predict?
+
+$\rightarrow$ What variables are possible predictors?
+
+
+
+#### Rename the columns
+
+The names of the columns in this data frame are understandable, but two of the columns, `switch` and `distance`, have the names of functions that already exist in R. It is bad practice to name your variables or functions after existing functions, so we will change them. While we are at it, we will change some other names to be complete words.
+
+
+```{r}
+
+df <- df %>% 
+  rename(switch_well = "switch",
+         distance = "dist",
+         association = "assoc",
+         education = "educ")
+
+```
+
+```{r}
+
+head(df)
+
+```
+
+
+### Further exploration of basic properties
+
+
+#### Check for a tidy data frame
+
+In a tidy data set, each column is a variable or id and each row is an observation. 
+
+<details>
+  <summary>**Show Answer**</summary>
+  
+Each column is a variable and each row is an observation, so the data frame is tidy. We are benefiting from some of the pre-processing that was performed on the data.
+
+</details>
+<br>
+
+
+$\rightarrow$ How many observations are in the data set? How many missing values are there in each column?
+
+
+
+Note that all variables are coded as numeric variables, but `switch_well` and `association` are categorical variables that happen to be coded using 0 and 1. We will convert these variables to factors.
+<br>
+
+#### Convert data types for qualitative predictor
+
+
+
+$\rightarrow$ Use the `mutate` function to convert `switch_well` and `association` to factors.
+
+
+
+
+## Exploratory data analysis
+
+
+We have two main goals when doing exploratory data analysis. The first is that we want to understand the data set more completely. The second goal is to explore relationships between the variables to help guide the modeling process to answer our specific question.
+
+### Numerical summaries
+
+
+
+$\rightarrow$ What are the ranges of each of the numerical variables? Are the counts of households that switch wells and do not switch wells balanced or unbalanced? That is, do we have roughly equal numbers of households that switch wells and do not switch wells?
+
+
+
+
+### Graphical summaries
+
+
+$\rightarrow$ Use a pairs-plot to investigate the distributions of the variables and relationships between variables. Consider the following questions:
+
+1. What is the shape of the distribution of the numerical variables?
+
+2. Do the predictor variables have different distributions for households that switch_well and do not switch_well wells?
+
+
+
+
+
+
+#### Plot each input numerical variable vs. switch_well
+
+We want to investigate whether the probability of switching wells is a clear function of the input numerical variables. 
+
+$\rightarrow$ Make scatter plots of `switch_well` vs. each of the input numerical variables.
+
+<details>
+  <summary>**Show Coding Hint**</summary>
+
+Use `geom_jitter` so that you can see the density of points. Without jittering the points, many values lie on top of each other and it is difficult to visually estimate the probability of switching.
+
+</details>
+
+
+
+#### Examine counts of categorical variable vs. switch_well
+
+We want to investigate whether the probability of switching wells is a clear function of the input categorical variables `association`. 
+
+$\rightarrow$ Count the number of switches for each value of `association`. Additionally, calculate the proportion of switches for each value of `association`.
+
+
+<details>
+  <summary>**Show Coding Hint**</summary>
+  
+Use `group_by` to group the data set based on `association` before counting the number of switches and non-switches.  
+
+</details>
+
+
+
+## Exploratory modeling
+
+We will build logistic regression models of increasing complexity in order to further understand the data.
+
+### Fit a model with distance as the predictor
+
+$\rightarrow$ Before fitting, what sign do you expect for the coefficient on distance?
+
+
+
+
+
+$\rightarrow$ Fit a logistic regression model with distance as the predictor and examine the summary.
+
+
+
+
+It is difficult to interpret the coefficient on `distance` because distance is measured in meters. We don't expect much of a change in switching behavior for wells that are 1 meter apart. A more natural measure is 100s of meters. We will scale the distance variable to be in units of 100s of meters.
+
+$\rightarrow$ Use the `mutate` function to convert the distance units into 100s of meters.
+
+
+
+
+$\rightarrow$ Refit the model and inspect the summary. How do you expect the coefficients to change?
+
+
+
+
+$\rightarrow$ Plot the fitted logistic regression model:
+$$P(\text{switch_well} = 1|\text{distance}) = \frac{1}{1 + e^{-(0.61 - 0.62 \times \text{distance})}}$$
+along with the data.
+
+```{r}
+
+ggplot(df,aes(x = distance, y = as.numeric(switch_well)-1)) + 
+  geom_point(position = position_jitter(0,0.02)) + 
+  geom_smooth(method="glm", method.args=list(family="binomial"), se=FALSE, formula = y ~ x) + 
+  labs(x = "Distance (in 100 meters) to the nearest safe well", y = "Switch (No = 0, Yes = 1)")
+
+```
+
+
+#### Interpret the coefficients
+
+
+$\rightarrow$ Interpret the value of $\hat{\beta}_0$.
+
+
+
+
+$\rightarrow$ Interpret the value of $\hat{\beta}_1$ by discussing its sign and what it says about the maximum rate of change of the probability of switching.
+
+
+
+
+
+### Fit a model with distance and arsenic as predictors
+
+Fit the model and examine the coefficients.
+
+```{r}
+
+fit_dist_ars <- logistic_reg() %>% 
+  set_engine("glm") %>% 
+  fit(switch_well ~ distance + arsenic, data = df)
+
+tidy(fit_dist_ars)
+
+```
+
+
+
+#### Explore the model
+
+$\rightarrow$ Interpret the meaning of the coefficients.
+
+$\rightarrow$ Why did the coefficient for `distance` change when arsenic was added?
+
+
+#### Visualize
+
+Plot the decision boundary
+
+```{r}
+
+#Give a shorter name for the coefficients to make it easier to read
+betas <- fit_dist_ars$fit$coefficients
+
+df %>% 
+  ggplot(aes(x = distance, y = arsenic, color = factor(switch_well))) +
+  geom_point() +
+  geom_abline(intercept = -betas[1]/betas[3], slope = -betas[2]/betas[3]) +
+  labs(x = "Distance (in 100 meters) to the nearest safe well", y = "Arsenic concentration in well water", color = "Switch well") +
+  scale_color_manual(labels = c("No", "Yes"), values = c("blue", "orange"))
+
+```
+
+
+
+
+## Compare models
+
+We will use logistic regression, XGBoost, and k-nearest neighbors to construct models that predict the probability of switching wells.
+
+To compare the different approaches, we will use a training and testing split of the data set.
+
+We will use the tidymodels approach for all models.
+
+### Get train and test splits
+
+We will split the data into training and testing sets, with 80% of the data kept for training.   
+
+```{r}
+
+#Do the split. Keep 80% for training. Use stratified sampling based on switch_well to keep the proportion of switches in the test and training sets to be approximately equal.
+set.seed(12)
+split <- initial_split(df, prop = 0.8, strata = switch_well)
+
+#Extract the training and testing splits
+df_train <- training(split)
+df_test <- testing(split)
+
+```
+
+
+### Null model 
+
+The null model prediction always predicts the value of `switch_well` that occurs most often in the training data.
+
+
+$\rightarrow$ What is the null model prediction for `switch_well`?
+
+
+
+
+If we always predict that a household will switch wells, how accurate is the prediction on test data?
+
+```{r}
+
+null_accuracy <- sum(df_test$switch_well == 1)/length(df_test$switch_well)
+
+null_accuracy %>% round(3)
+
+```
+
+This represents a baseline that other models will be compared to.
+
+
+### Modeling steps using tidymodels
+
+Using tidymodels, we will take the same steps to modeling for each type of model that we use.
+
+1. Specify a model (e.g. logistic_reg(), boost_tree()) and set an engine
+2. Create a workflow that specifies the model formula to fit and the model type
+3. Fit any hyperparameters
+4. Fit the model to training data
+5. Predict using test data
+6. Assess the model
+
+
+### Logistic regression model
+
+#### Model specification
+
+$\rightarrow$ First specify a logistic regression model with the glm engine.
+
+
+
+#### Workflow
+
+$\rightarrow$ Create a workflow that specifies the model formula to fit and add the model specification.
+
+
+
+#### Fit to training data
+
+Fit the model to the training data and explore the coefficients.
+
+$\rightarrow$ First fit the model.
+
+
+$\rightarrow$ Examine the coefficients
+
+
+#### Predict test data
+
+$\rightarrow$ Generate predictions and bind the predictions together with the true `switch_well` values from the test data.
+
+
+
+#### Assess fit
+
+$\rightarrow$ Plot the confusion matrix.
+
+
+
+We will further analyze the performance of the model quantitatively by computing the prediction accuracy, the sensitivity, and the specificity. You should first convince yourself that you can compute these quantities by hand from the confusion matrix.
+
+
+$\rightarrow$ Get the prediction accuracy. This prediction accuracy is equal to the proportion of correct predictions in the test data set. 
+
+
+
+
+$\rightarrow$ Compare to  null model prediction
+
+
+
+
+$\rightarrow$ Get the sensitivity. This is the proportion of correct predictions for households that did switch wells.
+
+
+
+$\rightarrow$ Get the specificity. This is the proportion of correct predictions for households that did not switch wells.
+
+s
+
+
+### XGBoost
+
+
+#### Set up the model
+
+The model will be a boosted tree model, so we start by specifying the features of a `boost_tree` model. The`boost_tree` creates a specification of a model, but does not fit the model.
+
+
+$\rightarrow$ First specify an XGBoost model for classification with the xgboost engine. Set`tree_depth`, `min_n`, `loss_reduction`, `sample_size`, `mtry`, and `learn_rate` as parameters to tune. Set `trees` = 1000.
+
+
+
+
+
+$\rightarrow$ Create a workflow that specifies the model formula and the model type. We are still setting up the model; this does not fit the model.
+
+<details>
+  <summary>**Show Answer**</summary>
+```{r}
+
+xgb_wf <- workflow() %>%
+  add_formula(switch_well ~ .) %>%
+  add_model(xgb_model)
+
+xgb_wf
+
+```
+</details>
+<br>
+
+
+#### Fit the model
+
+We need to fit all of the parameters that we specified as `tune()`. 
+
+
+$\rightarrow$ Specify the parameter grid using the function `grid_latin_hypercube`:
+
+
+
+$\rightarrow$ Create folds for cross-validation, using stratified sampling based on `switch_well`.
+
+
+
+$\rightarrow$ Do the parameter fitting. 
+
+
+
+$\rightarrow$ Get the best model based on `accuracy`.
+
+
+
+$\rightarrow$ Update the workflow with the best parameters.
+
+
+
+#### Fit to training data
+
+$\rightarrow$ Fit the model to the training data.
+
+
+
+
+#### Predict test data
+
+$\rightarrow$ Generate predictions and bind them together with the true values from the test data.
+
+
+
+#### Assess fit
+
+$\rightarrow$ Plot the confusion matrix
+
+
+
+$\rightarrow$ Get prediction accuracy. This prediction accuracy is equal to the proportion of correct predictions in the test data set. 
+
+
+
+$\rightarrow$ Compare to  null model prediction
+
+
+
+
+$\rightarrow$ Get the sensitivity. This is the proportion of correct predictions for households that did switch wells.
+
+
+
+$\rightarrow$ Get the specificity. This is the proportion of correct predictions for households that did not switch wells.
+
+
+
+
+#### Relative importance of predictors
+
+$\rightarrow$ Look at which predictors are most important in the model
+
+
+
+
+### k nearest neighbors
+
+
+
+#### Model specification
+
+First specify a k nearest neighbors model with the kknn engine.
+
+```{r}
+
+knn_model <- nearest_neighbor(
+    mode = "classification",
+    neighbors = tune("K")
+  ) %>%
+  set_engine("kknn")
+
+
+```
+
+
+#### Workflow
+
+Create a workflow that specifies the model formula to fit and the model type.
+
+```{r}
+
+knn_wf <- workflow() %>%
+  add_formula() %>% #Fill in
+  add_model() #Fill in
+
+```
+
+
+#### Fit the hyperparameter k
+
+Specify a set of values of k to try.
+```{r}
+
+knn_grid <- parameters(knn_wf) %>%  
+  update(K = neighbors(c(1, 50))) %>% 
+  grid_latin_hypercube(size = 10)
+
+knn_grid
+
+```
+
+Use cross validation on the previously defined folds to find the best value of k.
+
+```{r}
+
+knn_grid_search <- tune_grid(
+  knn_wf,
+  resamples = folds,
+  grid = knn_grid,
+  control = control_grid(save_pred = TRUE)
+)
+
+knn_grid_search
+```
+
+
+
+Get the best model based on `accuracy`.
+
+```{r}
+
+best_knn <- select_best(knn_grid_search, "accuracy")
+
+```
+
+
+Update the workflow with the best parameter k.
+
+```{r}
+final_knn <- finalize_workflow(
+          #Fill in
+)
+
+final_knn
+```
+
+
+#### Fit to training data
+
+Fit the model to the training data and explore the coefficients.
+
+First fit the model.
+```{r}
+
+knn_fit <- final_knn %>% 
+  fit() #Fill in
+
+```
+
+
+#### Predict test data
+
+Generate predictions and bind together with the true values from the test data.
+```{r}
+
+predictions_knn <- knn_fit %>%
+  predict(new_data = ) %>%   #Fill in
+  bind_cols(df_test %>% select(switch_well))
+
+```
+
+
+#### Assess fit
+
+Visualize the confusion matrix
+
+```{r}
+
+predictions_knn %>%
+  conf_mat(switch_well, .pred_class) %>% 
+  pluck(1) %>% 
+  as_tibble() %>%
+  ggplot(aes(Prediction, Truth, alpha = n)) +
+  geom_tile(show.legend = FALSE) +
+  geom_text(aes(label = n), color = "blue", alpha = 1, size = 10)
+
+```
+
+
+Get prediction accuracy. This prediction accuracy is equal to the proportion of correct predictions in the test data set. 
+```{r}
+
+predictions_knn %>%
+  metrics(switch_well, .pred_class) %>%
+  select(-.estimator) %>%
+  filter(.metric == "accuracy") %>% 
+  mutate(.estimate = round(.estimate,3))
+  
+```
+Compare to  null model prediction
+
+The null model is accurate
+
+```{r}
+
+null_accuracy %>% round(3)
+
+```
+
+percent of the time.
+
+
+Get the sensitivity. This is the proportion of correct predictions for households that did switch wells.
+
+```{r}
+
+predictions_knn %>%
+  sens(switch_well, .pred_class, event_level = "second") %>%
+  select(-.estimator) %>%
+  mutate(.estimate = round(.estimate,3)) 
+
+```
+
+Get the specificity. This is the proportion of correct predictions for households that did not switch wells.
+
+```{r}
+
+predictions_knn %>%
+  spec(switch_well, .pred_class, event_level = "second") %>%
+  select(-.estimator) %>%
+  mutate(.estimate = round(.estimate,3))
+
+```
+
+
+
+### Compare models
+
+You used three methods to construct a model
+
+1. Logistic regression
+2. XGBoost
+3. k nearest neighbors
+
+Compare the performance of the models. 
+
+
+## Additional step
+
+Perform an additional step in the analysis of the water quality data. 
+
+## Conclusion
+
+After completing your analyses, you will make your conclusions and communicate your results. Consult Canvas for further directions.
+
+
+
+
+
