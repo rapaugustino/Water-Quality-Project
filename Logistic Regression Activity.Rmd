@@ -1,0 +1,434 @@
+---
+title: "Logistic Regression"
+output: html_document
+---
+
+
+
+## Load the packages
+
+```{r}
+library(MASS)
+library(tidyverse)
+library(tidymodels)
+
+theme_set(theme_bw())
+```
+
+
+## Examine the biopsy data set  
+
+```{r}
+
+
+```
+
+
+## Add a new binary class variable
+
+```{r}
+#Copy the data frame
+df <- biopsy
+
+#Define a new class variable 
+df <- df %>% 
+  mutate(Class = ifelse(class == "malignant", 1, 0)) 
+
+head(df)
+
+```
+
+
+## Attach the data set to work directly with the variables
+
+```{r}
+
+attach(df)
+
+```
+
+## Make graphs to explore relationships
+
+### Comparative boxplots
+
+```{r}
+
+#Fill in the argument of aes()
+df %>% 
+  ggplot(aes()) + 
+  geom_boxplot() +
+  labs(x = "Class", y = "Clump thickness (V1)")
+
+```
+
+
+## Density plots
+
+```{r}
+
+ggplot(data = biopsy, aes(x = V1, group = factor(Class), fill = factor(Class))) +
+  geom_density(alpha = 0.3) + xlab("Clump thickness (V1)") +
+  scale_fill_discrete(name = "class", labels=c("benign", "malignant")) 
+```
+
+### Plot `clump thickness` vs. `Class`
+
+We want a model that predicts tumor `class` (benign, malignant) based on the predictor `clump thickness`
+
+
+```{r}
+
+df %>% 
+  ggplot(aes(x = V1, y = Class)) +
+  geom_point() + 
+  labs(x = "Clump thickness (V1)", y = "Class")
+
+```
+
+### Revise the plot
+
+```{r}
+
+
+
+```
+
+### Linear regression is not ideal
+
+```{r}
+
+ggplot(biopsy,aes(x = V1, y = Class)) + 
+  geom_jitter(width = 0.2, height = 0.025) + 
+  geom_smooth(method = "lm", se=FALSE, formula = y ~ x) + 
+  labs(x = "Clump thickness (V1)",y = "Class")
+
+```
+
+
+### We model the conditional probability that $Y = 1$ given $X$
+
+```{r}
+
+ggplot(biopsy,aes(x = V1, y = Class)) + 
+  geom_jitter(width = 0.2, height = 0.025) + 
+  geom_smooth(method="glm", method.args=list(family="binomial"), se=FALSE, formula = y ~ x) + 
+  labs(x = "Clump thickness (V1)",y = "Class")
+
+```
+
+
+## What is the model?
+
+$$P(Y = 1|X) = g(\beta_0 + \beta_1 X)$$
+where $g(z)$ lies between 0 and 1.
+
+
+### Logistic regression uses the logistic function for $g$
+
+$$g(z) = \frac{e^z}{1 + e^{z}} =  \frac{1}{1 + e^{-z}}$$
+
+
+$$P(Y = 1|X) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 X)}}$$
+
+
+### The logit function
+
+The logistic function $g(z) = \frac{1}{1 + e^{-z}}$ is the inverse of the logit function
+
+$$\text{logit}(z) = \ln(\frac{z}{1 - z})$$
+
+
+$$\begin{eqnarray}
+\text{logit}(g(z)) & = & \ln(\frac{g(z)}{1 - g(z)}) \nonumber \\
+& = & \ln(\frac{\frac{1}{1 + e^{-z}}}{1 - \frac{1}{1 + e^{-z}}}) \nonumber \\
+& = & \ln(\frac{\frac{1}{1 + e^{-z}}}{\frac{e^{-z}}{1 + e^{-z}}}) \nonumber \\
+& = & \ln(\frac{1 + e^{-z}}{e^{-z}(1 + e^{-z})}) \nonumber \\
+& = & \ln(e^z) = z \nonumber 
+\end{eqnarray}$$
+
+### Another view of the model
+
+$$P(Y = 1|X) = p(X)$$
+
+$$\text{logit}(p(X)) = \beta_0 + \beta_1 X$$
+
+##
+
+
+Graph the logistic function $y = \frac{1}{1 + e^{-(\beta_0 + \beta_1) x}}$ for different values of $\beta_0$ and $\beta_1$, with $x \in [-5, 5]$. 
+
+How does each parameter influence the shape of the function?
+
+
+```{r}
+#Define the inverse logit function (logistic function) for plotting
+
+inv_logit = function(x){
+  1/(1 + exp(-x))
+}
+
+```
+
+
+### Vary parameters 
+
+```{r}
+#Coefficients to test
+b0 = c(-4,0,4)
+b1 = c(1,2,4,-2)
+
+colors = c("red","blue","yellow","gray")
+curve(inv_logit(b0[1] + b1[2]*x),xlim = c(-5,5),xlab = "z",ylab = "logistic function",lwd = 2,col = colors[1])
+for (i in 2:3){
+  curve(inv_logit(b0[i] + b1[2]*x),xlim = c(-5,5),xlab = "z",ylab = "logistic function",lwd = 2,add = TRUE,col = colors[i])
+}
+
+```
+
+
+
+### Vary parameters
+
+```{r}
+
+curve(inv_logit(b0[2] + b1[1]*x),xlim = c(-5,5),xlab = "z",ylab = "logistic function",lwd = 2,col = colors[1])
+for (i in 2:4){
+  curve(inv_logit(b0[2] + b1[i]*x),xlim = c(-5,5),xlab = "z",ylab = "logistic function",lwd = 2,add = TRUE,col = colors[i])
+}
+
+
+```
+
+
+###
+
+
+For what value of $z$ is $\displaystyle g(z) = \frac{1}{1 + e^{-z}} = 0.5$?
+
+
+
+###
+
+
+What is the rate of change of the probability $P(Y = 1|x) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 x)}}$ with respect to $x$?
+
+
+
+
+### 
+
+What is the maximum rate of change of the probability $P(Y = 1|x) = \frac{1}{1 + e^{-(\beta_0 + \beta_1 x)}}$ with respect to $x$?
+
+
+
+## Fit a logistic regression model
+
+```{r}
+
+#Fill in the model
+fit <- glm(, data = biopsy, family = binomial)
+
+
+#Note: binomial(link="logit") is default
+
+summary(fit)
+
+```
+
+
+## 
+
+```{r}
+
+ggplot(biopsy,aes(x = V1, y = Class)) + 
+  geom_jitter(width = 0.2, height = 0.025) + 
+  geom_smooth(method="glm", method.args=list(family="binomial"), se=FALSE, formula = y ~ x) +
+  labs(x = "Clump thickness (V1)",y = "Class") + scale_x_continuous(breaks = 1:10)
+
+```
+
+
+## Plot the decision boundary
+
+```{r}
+
+betas = coef(fit)
+bound = -betas[1]/betas[2]
+
+ggplot(data = biopsy, aes(x = V1, group = class, fill = class)) +
+  geom_density(alpha = 0.3) + xlab("Clump thickness (V1)") + theme_bw() +
+  scale_fill_discrete(name = "class", labels=c("benign", "malignant")) +
+  geom_vline(xintercept = bound) + scale_x_continuous(breaks = 1:10)
+
+```
+
+
+
+## Interpret the coefficients
+
+
+What does the model tell us about the relationship between tumor class and clump thickness (V1), given the values of the estimated coefficients?
+
+
+```{r}
+
+coef(fit) %>% round(2)
+
+```
+
+### $\hat{\beta}_0$
+
+
+
+
+### $\hat{\beta}_1$
+
+
+
+### Rate of change
+
+
+
+
+
+## Analyze model fit
+
+
+### Display the results
+
+```{r}
+
+ggplot(biopsy,aes(x = V1, y = Class)) + geom_jitter(width = 0.2, height = 0.025) + 
+  geom_smooth(method="glm", method.args=list(family="binomial"), se=FALSE, formula = y ~ x) + 
+  labs(x = "Clump thickness (V1)",y = "Class") + geom_hline(yintercept = 0.5)
+
+```
+
+
+# Use tidymodels
+
+## Specify a logistic regression model with the glm engine.
+
+```{r}
+
+log_reg_model <- logistic_reg() %>%
+  set_engine("glm")
+
+```
+
+
+## Create a workflow
+
+```{r}
+
+log_reg_wf <- workflow() %>%
+  add_formula(class ~ V1) %>%
+  add_model(log_reg_model)
+
+log_reg_wf
+```
+
+
+## Fit the model
+
+```{r}
+
+log_reg_fit <- log_reg_wf %>% 
+  fit(df)
+
+log_reg_fit
+```
+
+## Predict the training data
+
+```{r}
+
+predictions_log_reg <- log_reg_fit %>%
+  predict(new_data = df) %>% 
+  bind_cols(df %>% select(class))
+
+```
+
+
+## Plot the confusion matrix
+
+```{r}
+
+predictions_log_reg %>%
+  conf_mat(class, .pred_class) %>% 
+  pluck(1) %>% 
+  as_tibble() %>%
+  ggplot(aes(Prediction, Truth, alpha = n)) +
+  geom_tile(show.legend = FALSE) +
+  geom_text(aes(label = n), color = "blue", alpha = 1, size = 10)
+
+```
+
+## Model accuracy
+
+```{r}
+
+predictions_log_reg %>%
+  metrics(class, .pred_class) %>%
+  select(-.estimator) %>%
+  filter(.metric == "accuracy") %>% 
+  mutate(.estimate = round(.estimate,3))
+  
+```
+
+
+## Sensitivity and specificity
+
+Sensitivity is the true positive rate = $\displaystyle \frac{\text{correctly predicted positives}}{\text{positives}}$
+
+Specificity is the true negative rate = $\displaystyle \frac{\text{correctly predicted negatives}}{\text{negatives}}$
+
+For a good test, you want both to be high (close to 1).
+
+```{r}
+
+predictions_log_reg %>%
+  sens(class, .pred_class , event_level = "second") 
+
+  
+```
+
+```{r}
+
+predictions_log_reg %>%
+  spec(class, .pred_class , event_level = "second") 
+
+```
+
+## Null model prediction
+
+```{r}
+
+df %>% 
+  count(class)
+
+```
+
+## Null model prediction accuracy
+
+```{r}
+
+null_accuracy <- sum(class == "benign")/length(class)
+
+null_accuracy %>% round(3)
+
+```
+
+
+
+
+
+
+
+
+## Discussion questions
+
+1. Do the model coefficients have the same interpretation in a logistic regression model that they did in a linear regression model?
+
+2. How can you evaluate the performance of a logistic regression model?
+
