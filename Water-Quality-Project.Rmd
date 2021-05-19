@@ -2,7 +2,7 @@
 title: "Water Quality"
 output: html_document
 ---
-
+# Richard Pallangyo
 
 ## Introduction
 
@@ -77,6 +77,9 @@ Use `read.table`
 
 </details>
 
+```{r}
+df <- read.table('wells.dat')
+```
 
 
 
@@ -86,25 +89,43 @@ Use `read.table`
 
 $\rightarrow$ Look at the first few rows of the data frame.
 
-<details>
-  <summary>**Show Coding Hint**</summary>
+```{r}
+head(df)
+```
 
-You can use the functions `head` or `glimpse` to see the head of the data frame or the function `skim` to get a nice summary.
-  
-</details>
-
-
-<br>
 
 
 #### Explore the columns
 
 $\rightarrow$ What are the variables?
+The variables in the data set are:
+
+1. `switch`: An indicator of whether a household switches wells.
+
+2. `arsenic`: The arsenic level of the household’s well.
+
+3. `dist`: The distance (in meters) to the closest known safe well.
+
+4. `assoc`: An indicator of whether any members of the household are involved in community organizations.
+
+5. `educ`: The highest education level in the household.
+
 
 $\rightarrow$ What variable(s) do we want to predict?
+We are interested in whether households switched the wells they were using after wells were labeled as either safe or unsafe, based on measured arsenic levels. So, we are trying to predict switch.
+
 
 $\rightarrow$ What variables are possible predictors?
 
+We will consider the following inputs to a model:
+
+The distance (in meters) to the closest known safe well `dist`
+
+The arsenic level of the household’s well `arsenic`
+
+Whether any members of the household are involved in community organizations `assoc`
+
+The highest education level in the household `educ`
 
 
 #### Rename the columns
@@ -147,6 +168,10 @@ Each column is a variable and each row is an observation, so the data frame is t
 
 $\rightarrow$ How many observations are in the data set? How many missing values are there in each column?
 
+```{r}
+skim_without_charts(df)
+```
+There are 3020 observations and no missing values.
 
 
 Note that all variables are coded as numeric variables, but `switch_well` and `association` are categorical variables that happen to be coded using 0 and 1. We will convert these variables to factors.
@@ -157,6 +182,10 @@ Note that all variables are coded as numeric variables, but `switch_well` and `a
 
 
 $\rightarrow$ Use the `mutate` function to convert `switch_well` and `association` to factors.
+```{r}
+df <- df %>% mutate(switch_well = factor(switch_well)) %>% mutate(association = factor(association))
+
+```
 
 
 
