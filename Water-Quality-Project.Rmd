@@ -201,6 +201,17 @@ We have two main goals when doing exploratory data analysis. The first is that w
 
 $\rightarrow$ What are the ranges of each of the numerical variables? Are the counts of households that switch wells and do not switch wells balanced or unbalanced? That is, do we have roughly equal numbers of households that switch wells and do not switch wells?
 
+```{r}
+skim_without_charts(df)
+```
+
+The arsenic level of the household’s well `arsenic` ranges from 0.51 to 9.65.
+
+The distance (in meters) to the closest known safe well `distance` ranges from 0.387 to 340 meters.
+
+The highest education level in the household `education` ranges from 0 to 17.
+
+1737 of 3020 (57.5%) of households switched wells, so the counts are reasonably balanced.
 
 
 
@@ -213,6 +224,15 @@ $\rightarrow$ Use a pairs-plot to investigate the distributions of the variables
 
 2. Do the predictor variables have different distributions for households that switch_well and do not switch_well wells?
 
+```{r}
+ggpairs(df,lower = list(continuous = "cor", combo = "box_no_facet", discrete ="facetbar", na = "na"), upper = list(continuous = "points", combo ="facethist", discrete = "facetbar", na = "na"), progress = FALSE)
+```
+
+`arsenic` and `distance` have unimodal, positively skewed distributions.
+
+`education` has a bimodal distribution with peaks at 0 and 5.
+
+The distributions of `arsenic`, `distance`, and `education` do not appear to be obviously different for households that switch and do not switch wells.
 
 
 
@@ -232,6 +252,38 @@ Use `geom_jitter` so that you can see the density of points. Without jittering t
 </details>
 
 
+Plot `switch_well` vs. `arsenic`
+
+```{r}
+df %>% 
+  ggplot(aes(x=arsenic, y=switch_well)) + 
+  geom_jitter(width = 0, height = 0.1) +
+  labs(x = "Arsenic level in nearest well", y = "Switch (No = 0, Yes = 1)")
+```
+
+There appears to be a slight increase in the probability of switching as the arsenic level increases, but it is not a dramatic increase
+
+
+Plot `switch_well` vs. `distance`
+
+```{r}
+df %>% 
+  ggplot(aes(x = distance, y = switch_well)) +
+  geom_jitter(width = 0, height = 0.1) +
+  labs(x = "Distance (in meters) to the nearest safe well", y = "Switch (No = 0, Yes = 1)")
+```
+There appears to be a slight decrease in the probability of switching as distance increases, but it is not a dramatic increase.
+
+Plot `switch_well` vs. `education`
+
+```{r}
+df %>% 
+  ggplot(aes(x = education, y = switch_well)) +
+  geom_jitter(width = 0.15, height = 0.1) +
+  labs(x = "Education level", y = "Switch (No = 0, Yes = 1)")
+```
+There appears to be a slight increase in the probability of switching as the education level increases, but it is not a dramatic increase.
+
 
 #### Examine counts of categorical variable vs. switch_well
 
@@ -239,6 +291,14 @@ We want to investigate whether the probability of switching wells is a clear fun
 
 $\rightarrow$ Count the number of switches for each value of `association`. Additionally, calculate the proportion of switches for each value of `association`.
 
+```{r}
+df %>%
+  group_by(association) %>%
+  count(switch_well) %>%
+  mutate(proportion = round(n/sum(n),2))
+```
+
+The numbers are not hugely different, but there is a higher proportion of switches for households that are not involved in community organizations.
 
 <details>
   <summary>**Show Coding Hint**</summary>
