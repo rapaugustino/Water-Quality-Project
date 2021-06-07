@@ -861,7 +861,7 @@ Compare the performance of the models.
 
 Display the metrics of the models in a table format
 ```{r}
-model_table <- matrix(c(0.633,0.851,0.339,0.646,0.874, 0.342, 0.626,0.77,0.432,0.631, 0.6466,0.627),ncol=3,byrow=TRUE)
+model_table <- matrix(c(0.633,0.851,0.339,0.646,0.874, 0.342, 0.626,0.77,0.432,0.613, 0.595, 0.616),ncol=3,byrow=TRUE)
 colnames(model_table) <- c("Accuracy","Sensitivity","Specificity")
 rownames(model_table) <- c("Logistic regression","XGBoost","K Nearest Neighbours","Naïve Bayes")
 model_table <- as.table(model_table)
@@ -882,36 +882,36 @@ library(caTools)
 library(caret)
 
 # Splitting data into training and testing datasets
-split <- sample.split(df, SplitRatio = 0.8)
-train_df <- subset(df, split == "TRUE")
-test_df <- subset(df, split == "FALSE")
+#split <- sample.split(df, SplitRatio = 0.8)
+#train_df <- subset(df, split == "TRUE")
+#test_df <- subset(df, split == "FALSE")
 
-train_scale <- scale(train_df[, 2:3])
-test_scale <- scale(test_df[, 2:3])
+train_scale <- scale(df_train[, 2:3])
+test_scale <- scale(df_test[, 2:3])
 
 # Fitting Naive Bayes Model to the training dataset
-set.seed(120) # Setting Seed
-classifier_cl <- naiveBayes(switch_well ~ ., data = train_df)
+#set.seed(120) # Setting Seed
+classifier_cl <- naiveBayes(switch_well ~ ., data = df_train)
 classifier_cl
 
 # Predicting on test data'
-y_pred <- predict(classifier_cl, newdata = test_df)
+y_pred <- predict(classifier_cl, newdata = df_test)
 
 # Confusion Matrix
-cm <- table(test_df$switch_well, y_pred)
+cm <- table(df_test$switch_well, y_pred)
 
 # Model Evauation
 confusionMatrix(cm)
 ```
 
-The Naïve Bayes Classifier is accurate  63% of the time.
+The Naïve Bayes Classifier is accurate  61% of the time.
 
 
 ## Conclusion
 
 This project aimed to determine whether households switched well in Bangladesh by following a study conducted in 2004 on arsenic levels in drinking water. The data we used comprised several variables believed to have influenced a decision of a household to switch well or not. We conducted predictive analytics to investigate how accurately we can predict whether or not a household will change wells based on these environmental factors, particularly arsenic levels and distance to the nearest safe well. 
 
-* The dataset used had five variables as listed below.
+The dataset used had five variables as listed below.
 * An indicator of whether a household switches wells
 * The distance (in meters) to the closest known safe well
 * The arsenic level of the household’s well
